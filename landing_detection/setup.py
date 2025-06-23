@@ -10,6 +10,8 @@ setup(
         'landing_detection.aruco_landing_pose',
         'landing_detection.detect_bulleye',
         'landing_detection.Landing_spot_pose_estimator',
+        'landing_detection.aruco_landing_pose_1_foot',
+        'landing_detection.aruco_landing_pose_3_foot',
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -22,6 +24,8 @@ setup(
             'aruco_landing_pose = landing_detection.aruco_landing_pose:main',
             'detect_bulleye = landing_detection.detect_bulleye:main',
             'landing_spot_pose_estimator = landing_detection.Landing_spot_pose_estimator:main',
+            'aruco_landing_pose_1_foot = landing_detection.aruco_landing_pose_1_foot:main',
+            'aruco_landing_pose_3_foot = landing_detection.aruco_landing_pose_3_foot:main',
         ],
     },
 )

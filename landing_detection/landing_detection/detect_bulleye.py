@@ -1,4 +1,3 @@
-
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
@@ -8,11 +7,10 @@ import cv2
 import numpy as np
 
 # Hardcoded intrinsics
-fx, fy, cx, cy = 600.0, 600.0, 320.0, 240.0
+fx, fy, cx, cy = 2466.3471145602066, 2464.0089937742105, 1052.1785889481048, 772.2511337898699
 camera_matrix = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float64)
-dist_coeffs = np.array([0.1, -0.05, 0.0, 0.0, 0.01], dtype=np.float64)
+dist_coeffs = np.array([-0.3959231757313176, 0.1938111775664629, -0.0007922338732447631, -0.0006574750716075775, 0.0], dtype=np.float64)
 
-# Camera-to-drone transformation matrix (example: identity + 10cm forward)
 T_cam_to_drone = np.array([
     [1, 0, 0, 0.1],
     [0, 1, 0, 0.0],
@@ -23,9 +21,9 @@ T_cam_to_drone = np.array([
 class BullseyePoseEstimator(Node):
     def __init__(self):
         super().__init__('bullseye_pose_estimator')
-        self.declare_parameter('image_topic', '/cam_2/color/image_raw')
+        self.declare_parameter('image_topic', '/flir_camera/image_raw')
         self.declare_parameter('camera_frame', 'camera_frame')
-        self.declare_parameter('target_diameter', 0.2)
+        self.declare_parameter('target_diameter', 0.6096)
 
         self.image_topic = self.get_parameter('image_topic').value
         self.frame_id = self.get_parameter('camera_frame').value
@@ -34,6 +32,11 @@ class BullseyePoseEstimator(Node):
         self.bridge = CvBridge()
         self.sub = self.create_subscription(Image, self.image_topic, self.image_callback, 10)
         self.pose_pub = self.create_publisher(PoseStamped, '/bullseye_pose', 10)
+
+        self.last_display_time = self.get_clock().now()
+        self.display_interval = rclpy.duration.Duration(seconds=0.1)  # ~10 FPS
+
+        cv2.startWindowThread()
 
     def image_callback(self, msg):
         img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
@@ -50,7 +53,7 @@ class BullseyePoseEstimator(Node):
         )
 
         if inner_circles is not None:
-            ix, iy, ir = np.uint16(np.around(inner_circles))[0][0]
+            ix, iy, ir = np.around(inner_circles[0][0]).astype(np.int32)
             cv2.circle(img, (ix, iy), ir, (0, 255, 0), 2)
 
             masked = gray.copy()
@@ -62,7 +65,10 @@ class BullseyePoseEstimator(Node):
             )
 
             if outer_circles is not None:
-                ox, oy, orad = min(np.uint16(np.around(outer_circles))[0], key=lambda c: np.hypot(c[0]-ix, c[1]-iy))
+                outer_candidates = np.around(outer_circles[0]).astype(np.int32)
+                ox, oy, orad = min(
+                    outer_candidates, key=lambda c: np.hypot(c[0] - ix, c[1] - iy)
+                )
                 center_dist = np.hypot(ox - ix, oy - iy)
                 radius_ratio = orad / ir
 
@@ -111,8 +117,12 @@ class BullseyePoseEstimator(Node):
 
         cv2.putText(img, 'Bullseye Detected' if detected else 'Detection Failed',
                     (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0) if detected else (0,0,255), 2)
-        cv2.imshow('Bullseye Detection Debug', img)
-        cv2.waitKey(1)
+
+        now = self.get_clock().now()
+        if now - self.last_display_time > self.display_interval:
+            cv2.imshow('Bullseye Detection Debug', img)
+            cv2.waitKey(1)
+            self.last_display_time = now
 
     def rotation_matrix_to_quaternion(self, R):
         q = np.empty((4,))
@@ -154,3 +164,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
