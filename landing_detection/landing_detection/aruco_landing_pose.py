@@ -12,7 +12,7 @@ class ArucoPoseEstimator(Node):
         super().__init__('aruco_pose_estimator')
         self.bridge = CvBridge()
 
-        self.camera_topics = ['/cam_1/color/image_raw', '/cam_2/color/image_raw', '/cam3/image_raw']
+        self.camera_topics = ['/cam_1/color/image_raw', '/cam_2/color/image_raw', '/flir_camera/image_raw']
         self.camera_to_drone_tf = {
             '/cam_1/color/image_raw': np.array([[-1.0 , 0.0, 0.0 , 0.0],
                                        		[0.0, 0.0, 1.0, 0.11435],
@@ -22,7 +22,10 @@ class ArucoPoseEstimator(Node):
                                        		[0.0, 0.70710678118, -0.70710678118, 0.11435],
                                        		[0.0, 0.707106781180, 0.70710678118, 0.12037],
 				       		[0.0, 0.0, 0.0, 1.0]]),  # Replace with actual 4x4 transformation matrices, this is the 45° tilted camera facing camera
-            '/cam3/image_raw': np.eye(4)
+            '/flir_camera/image_raw': np.array([[0.0 , 0.0, 1.0 , 0.0],
+                                       	[-1.0, 0.0, 0.0, 0.0],
+                                       	[0.0, -1.0, 0.0, 0.0],
+				       	[0.0, 0.0, 0.0, 1.0]]),
         }
 
         self.subscribers = [
@@ -33,7 +36,7 @@ class ArucoPoseEstimator(Node):
         self.pose_pub = self.create_publisher(PoseStamped, '/aruco/pose', 10)
         self.msg_pub = self.create_publisher(String, '/aruco/message', 10)
 
-        self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_100) # Change the dictionnary if you notice that the detection isn't happening
+        self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_ARUCO_ORIGINAL) # Change the dictionnary if you notice that the detection isn't happening
         self.aruco_params = cv2.aruco.DetectorParameters()
 
         self.camera_calibrations = {
@@ -49,15 +52,15 @@ class ArucoPoseEstimator(Node):
                                         [0.0, 0.0, 1.0]]),
                 'dist_coeffs': np.array([-0.045676, 0.033884, -0.001094, 0.000959, 0.0])
             },
-            '/cam3/image_raw': {
-                'camera_matrix': np.array([[600, 0.0, 320],
-                                        [0.0, 600, 320],
+            '/flir_camera/image_raw': {
+                'camera_matrix': np.array([[2466.3471145602066, 0.0, 1052.1785889481048],
+                                        [0.0, 2464.0089937742105, 772.2511337898699],
                                         [0.0, 0.0, 1.0]]),
-                'dist_coeffs': np.array([0.0, 0.0, 0.0, 0.0, 0.0])
+                'dist_coeffs': np.array([-0.3959231757313176, 0.1938111775664629, -0.0007922338732447631, -0.0006574750716075775, 0.0])
             }
         }
 
-        self.marker_length = 0.2  # [m] known side length of ArUco markers
+        self.marker_length = 0.297  # [m] known side length of ArUco markers
 
         self.get_logger().info("ArucoPoseEstimator node started.")
 
