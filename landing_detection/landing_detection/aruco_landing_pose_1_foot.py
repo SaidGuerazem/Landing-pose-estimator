@@ -14,20 +14,19 @@ class ArucoPoseEstimator(Node):
 
         self.camera_topics = ['/cam_1/color/image_raw', '/cam_2/color/image_raw', '/flir_camera/image_raw']
         self.camera_to_drone_tf = {
-            '/cam_1/color/image_raw': np.array([[-1.0 , 0.0, 0.0 , 0.0],
-                                       		[0.0, 0.0, 1.0, 0.11435],
-                                       		[0.0, 1.0, 0.0, 0.12037],
+            '/cam_1/color/image_raw': np.array([[0.0 , 0.0, 1.0 , 0.0],
+                                       		[-1.0, 0.0, 0.0, -0.12037],
+                                       		[0.0, -1.0, 0.0, -0.11435],
 				       		[0.0, 0.0, 0.0, 1.0]]),  # Replace with actual 4x4 transformation matrices, this is the front facing camera
-            '/cam_2/color/image_raw': np.array([[1.0 , 0.0, 0.0 , 0.0],
-                                       		[0.0, 0.70710678118, -0.70710678118, 0.11435],
-                                       		[0.0, 0.707106781180, 0.70710678118, 0.12037],
+            '/cam_2/color/image_raw': np.array([[0.0, 0.707106781180, 0.70710678118, 0.0],
+                                       		[1.0, 0.0, 0.0, -0.12037],
+                                       		[0.0, 0.707106781180, -0.70710678118, -0.11435],
 				       		[0.0, 0.0, 0.0, 1.0]]),  # Replace with actual 4x4 transformation matrices, this is the 45° tilted camera facing camera
-            '/flir_camera/image_raw': np.array([[0.0 , 0.0, 1.0 , 0.0],
-                                       	[-1.0, 0.0, 0.0, 0.0],
-                                       	[0.0, -1.0, 0.0, 0.0],
-				       	[0.0, 0.0, 0.0, 1.0]]),
+            '/flir_camera/image_raw': np.array([[0.0 , -1.0, 0.0 , 0.0],
+                                       		[1.0, 0.0, 0.0, 0.0],
+                                       		[0.0, 0.0, 1.0, 0.0],
+				       		[0.0, 0.0, 0.0, 1.0]]),
         }
-
         self.subscribers = [
             self.create_subscription(Image, topic, self.make_callback(topic), 10)
             for topic in self.camera_topics
@@ -95,11 +94,10 @@ class ArucoPoseEstimator(Node):
                     msg_str.data = f"Marker ID: {marker_id}"
                     self.msg_pub.publish(msg_str)
 
-                    cv2.aruco.drawAxis(frame, camera_matrix, dist_coeffs,
-                                    rvec, tvec, self.marker_length * 0.5)
+                    # cv2.aruco.drawAxis(frame, camera_matrix, dist_coeffs, rvec, tvec, self.marker_length * 0.5)
 
-            cv2.imshow(f"View from {topic_name}", frame)
-            cv2.waitKey(1)
+            # cv2.imshow(f"View from {topic_name}", frame)
+            # cv2.waitKey(1)
         return callback
 
     def rvec_tvec_to_homogeneous(self, rvec, tvec):
