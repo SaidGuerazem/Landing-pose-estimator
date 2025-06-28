@@ -12,6 +12,7 @@ setup(
         'landing_detection.Landing_spot_pose_estimator',
         'landing_detection.aruco_landing_pose_1_foot',
         'landing_detection.aruco_landing_pose_3_foot',
+        'landing_detection.aruco_centroid_detect',
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -26,6 +27,7 @@ setup(
             'landing_spot_pose_estimator = landing_detection.Landing_spot_pose_estimator:main',
             'aruco_landing_pose_1_foot = landing_detection.aruco_landing_pose_1_foot:main',
             'aruco_landing_pose_3_foot = landing_detection.aruco_landing_pose_3_foot:main',
+            'aruco_centroid_detect = landing_detection.aruco_centroid_detect:main',
         ],
     },
 )

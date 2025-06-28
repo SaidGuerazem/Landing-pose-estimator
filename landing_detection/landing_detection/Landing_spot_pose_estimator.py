@@ -13,7 +13,6 @@ class LandingPoseEstimator(Node):
 
         self.camera_topics = ['/flir_camera/image_raw', '/cam_2/color/image_raw']
 
-        # 🔧 Define per-camera intrinsics and transformations
         self.camera_params = {
             '/flir_camera/image_raw': {
                 'camera_matrix': np.array([[2466.3471, 0.0, 1052.1786],
@@ -21,9 +20,9 @@ class LandingPoseEstimator(Node):
                                            [0.0, 0.0, 1.0]]),
                 'dist_coeffs': np.array([-0.395923, 0.193811, -0.000792, -0.000657, 0.0]),
                 'T_cam_drone': np.array([[0.0 , -1.0, 0.0 , 0.0],
-                                       		[1.0, 0.0, 0.0, 0.0],
-                                       		[0.0, 0.0, 1.0, 0.0],
-				       		[0.0, 0.0, 0.0, 1.0]]),
+                                         [1.0, 0.0, 0.0, 0.0],
+                                         [0.0, 0.0, 1.0, 0.0],
+                                         [0.0, 0.0, 0.0, 1.0]]),
             },
             '/cam_2/color/image_raw': {
                 'camera_matrix': np.array([[413.3101, 0.0, 424.8177],
@@ -54,49 +53,63 @@ class LandingPoseEstimator(Node):
             frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-            red_mask = cv2.inRange(hsv, np.array([0, 120, 70]), np.array([10, 255, 255]))
-            red_mask |= cv2.inRange(hsv, np.array([170, 120, 70]), np.array([180, 255, 255]))
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            blurred = cv2.GaussianBlur(gray, (7, 7), 0)
+            _, thresh = cv2.threshold(blurred, 50, 255, cv2.THRESH_BINARY)
+            contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-            green_mask = cv2.inRange(hsv, np.array([35, 100, 100]), np.array([85, 255, 255]))
+            for cnt in contours:
+                if cv2.contourArea(cnt) > 1000 and len(cnt) >= 5:
+                    ellipse = cv2.fitEllipse(cnt)
 
-            for color, mask in [('red', red_mask), ('green', green_mask)]:
-                contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                for cnt in contours:
-                    if cv2.contourArea(cnt) > 1000:
-                        ellipse = cv2.fitEllipse(cnt)
-                        image_points = self.get_ellipse_image_points(ellipse)
+                    # Create a mask for the ellipse area
+                    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+                    cv2.ellipse(mask, ellipse, 255, -1)
 
-                        radius = 0.915  # [m]
-                        model_points = np.array([
-                            [-radius, 0, 0],
-                            [ radius, 0, 0],
-                            [0, -radius, 0],
-                            [0,  radius, 0]
-                        ], dtype=np.float32)
+                    # Compute average HSV inside the ellipse
+                    mean_hsv = cv2.mean(hsv, mask=mask)
+                    hue = mean_hsv[0]
 
-                        cam_matrix = self.camera_params[topic_name]['camera_matrix']
-                        dist_coeffs = self.camera_params[topic_name]['dist_coeffs']
+                    # Decide color based on hue
+                    if hue < 15 or hue > 165:
+                        color = 'red'
+                    elif 30 < hue < 90:
+                        color = 'green'
+                    else:
+                        continue  # skip ambiguous color
 
-                        success, rvec, tvec = cv2.solvePnP(
-                            model_points, image_points, cam_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE
-                        )
+                    image_points = self.get_ellipse_image_points(ellipse)
+                    radius = 0.915  # meters
+                    model_points = np.array([
+                        [-radius, 0, 0],
+                        [ radius, 0, 0],
+                        [0, -radius, 0],
+                        [0,  radius, 0]
+                    ], dtype=np.float32)
 
-                        if success:
-                            T_cam_marker = self.rvec_tvec_to_homogeneous(rvec, tvec)
-                            T_cam_drone = self.camera_params[topic_name]['T_cam_drone']
-                            T_drone_marker = T_cam_drone @ T_cam_marker
+                    cam_matrix = self.camera_params[topic_name]['camera_matrix']
+                    dist_coeffs = self.camera_params[topic_name]['dist_coeffs']
 
-                            pose_msg = self.matrix_to_posestamped(T_drone_marker, msg.header.stamp)
+                    success, rvec, tvec = cv2.solvePnP(
+                        model_points, image_points, cam_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE
+                    )
 
-                            if color == 'red':
-                                self.pub_red.publish(pose_msg)
-                            else:
-                                self.pub_green.publish(pose_msg)
+                    if success:
+                        T_cam_marker = self.rvec_tvec_to_homogeneous(rvec, tvec)
+                        T_cam_drone = self.camera_params[topic_name]['T_cam_drone']
+                        T_drone_marker = T_cam_drone @ T_cam_marker
 
-                            # cv2.ellipse(frame, ellipse, (0, 255, 255), 2)
+                        pose_msg = self.matrix_to_posestamped(T_drone_marker, msg.header.stamp)
 
-            # cv2.imshow(f"Detection from {topic_name}", frame)
-            # cv2.waitKey(1)
+                        if color == 'red':
+                            self.pub_red.publish(pose_msg)
+                        else:
+                            self.pub_green.publish(pose_msg)
+
+                        cv2.ellipse(frame, ellipse, (0, 0, 255) if color == 'red' else (0, 255, 0), 2)
+
+            cv2.imshow(f"Detection from {topic_name}", frame)
+            cv2.waitKey(1)
         return callback
 
     def get_ellipse_image_points(self, ellipse):
