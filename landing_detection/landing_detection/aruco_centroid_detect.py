@@ -11,22 +11,23 @@ class ArucoCentroidDetection(Node):
         super().__init__('aruco_centroid_detection')
         self.bridge = CvBridge()
 
-        self.camera_topics = ['/cam_1/color/image_raw', '/cam_2/color/image_raw', '/flir_camera/image_raw']
+        self.topic_camera_map = {
+            '/cam_2/color/image_raw': 'forward',
+            '/flir_camera/image_raw': 'down',
+        }
+
+        self.camera_topics = list(self.topic_camera_map.keys())
         self.subscribers = [
             self.create_subscription(Image, topic, self.make_callback(topic), 10)
             for topic in self.camera_topics
         ]
 
-        self.aruco_publishers = {
-            '/cam_1/color/image_raw': self.create_publisher(String, '/cam_1/aruco', 10),
-            '/cam_2/color/image_raw': self.create_publisher(String, '/cam_2/aruco', 10),
-            '/flir_camera/image_raw': self.create_publisher(String, '/flir_camera/aruco', 10)
-        }
+        self.aruco_publisher = self.create_publisher(String, '/aruco_detections', 10)
 
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_ARUCO_ORIGINAL)
         self.aruco_params = cv2.aruco.DetectorParameters()
 
-        self.get_logger().info("Aruco centroid publisher node started.")
+        self.get_logger().info("Unified Aruco centroid publisher node started.")
 
     def make_callback(self, topic_name):
         def callback(msg):
@@ -37,24 +38,26 @@ class ArucoCentroidDetection(Node):
                 frame, self.aruco_dict, parameters=self.aruco_params
             )
 
-            if ids is not None:
-                centroids = []
+            detection_strs = []
+            camera_label = self.topic_camera_map.get(topic_name, None)
+            if ids is not None and camera_label:
                 for i, marker_id in enumerate(ids.flatten()):
                     marker_corners = corners[i][0]  # shape (4, 2)
                     cx = int(np.mean(marker_corners[:, 0]))
                     cy = int(np.mean(marker_corners[:, 1]))
                     norm_cx = cx / width
                     norm_cy = cy / height
-                    centroids.append({"id": int(marker_id), "x": norm_cx, "y": norm_cy})
+                    detection_strs.append(f"{{{camera_label}, {marker_id}, {norm_cy:.4f}, {norm_cx:.4f}}}")
 
+            if detection_strs:
                 msg_str = String()
-                msg_str.data = str(centroids)
+                msg_str.data = ' '.join(detection_strs)
             else:
                 msg_str = String()
                 msg_str.data = "None"
 
-            self.aruco_publishers[topic_name].publish(msg_str)
-            self.get_logger().info(f"{topic_name} centroids: {msg_str.data}")
+            self.aruco_publisher.publish(msg_str)
+            self.get_logger().info(f"Detections from {camera_label or topic_name}: {msg_str.data}")
         return callback
 
 def main(args=None):
